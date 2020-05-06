@@ -7,14 +7,17 @@ uses
   System.Classes, Vcl.Graphics, System.ImageList, Vcl.ImgList, Vcl.Controls,
   Vcl.Dialogs, System.Actions, Vcl.ActnList, System.IOUtils, System.Win.Registry,
 
-  BaseLayout_Frm, CommonValues, VBCommonValues,
+  BaseLayout_Frm, CommonValues, VBCommonValues, CommonFunction,
+
+  FireDAC.Phys.IBWrapper,
 
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, dxSkinsCore,
   dxSkinsDefaultPainters, cxImageList, dxLayoutLookAndFeels, cxClasses, cxStyles,
   dxLayoutContainer, dxLayoutControl, dxBar, dxScreenTip, dxSkinsForm, cxMemo,
   dxCustomHint, cxHint, cxContainer, cxEdit, cxProgressBar, dxStatusBar, cxTextEdit,
   dxLayoutcxEditAdapters, cxButtonEdit, cxBarEditItem, dxRibbonSkins,
-  dxRibbonCustomizationForm, dxRibbon, cxCurrencyEdit;
+  dxRibbonCustomizationForm, dxRibbon, cxCurrencyEdit, cxDropDownEdit,
+  cxCheckBox;
 
 type
   TMainFrm = class(TBaseLayoutFrm)
@@ -42,6 +45,10 @@ type
     edtDBFileName: TcxBarEditItem;
     prgUpgrade: TcxProgressBar;
     litProgress: TdxLayoutItem;
+    btnHistory: TdxBarLargeButton;
+    tipUpgradeHistory: TdxScreenTip;
+    actHistgory: TAction;
+    cbxBackupDB: TcxBarEditItem;
     procedure actExitExecute(Sender: TObject);
     procedure DoUpgradeDB(Sender: TObject);
     procedure FormCreate(Sender: TObject);
@@ -50,6 +57,8 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure DoUpgradehistory(Sender: TObject);
+    procedure cbxBackupDBPropertiesEditValueChanged(Sender: TObject);
   private
     { Private declarations }
     FStatementCount: Integer;
@@ -58,12 +67,14 @@ type
     FDBversion: Integer;
     FUpgradeVersion: Integer;
     FUpgrading: Boolean;
+    FBackupFolder: String;
 
     procedure LoadScriptFile(DBVersion: Integer);
     procedure UpdateApplicationSkin(SkinResourceFileName, SkinName: string);
     function GetDBVersion: Integer;
     function GetUpgradeVersion(CurrentDBVersion: Integer): Integer;
     procedure UpdateDBVersion(NewVersionNo: Integer);
+    procedure BackupDB(DBName, BackupName: string);
   public
     { Public declarations }
   end;
@@ -72,14 +83,19 @@ var
   MainFrm: TMainFrm;
 
 const
-  DB_VERSION = ' SELECT DB_VERSION FROM DB_INFO';
-  UPDATE_DB_VERSION = 'UPDATE DB_INFO SET DB_VERSION = %d;';
+  DB_VERSION = 'SELECT DB_VERSION FROM DB_INFO';
+  NEW_DB_VERSION = 'UPDATE DB_INFO SET DB_VERSION = %d;';
+  UPDATE_UPGRADE_HISTORY = 'INSERT INTO DB_UPGRADE_HISTORY(DB_VERSION) VALUES(%d)';
 
 implementation
 
 {$R *.dfm}
 
-uses RUtils, Backup_DM;
+uses
+  RUtils,
+  Backup_DM,
+  UpgraeHistory_Frm,
+  MsgDialog_Frm;
 
 procedure TMainFrm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 begin
@@ -88,6 +104,8 @@ begin
 end;
 
 procedure TMainFrm.FormCreate(Sender: TObject);
+var
+  RegKey: TRegistry;
 begin
   inherited;
   Caption := 'VB Database Upgrade Manager';
@@ -106,13 +124,31 @@ begin
 
   if BackupDM = nil then
     BackupDM := TBackupDM.Create(nil);
+
+  if MsgDialogFrm = nil then
+    MsgDialogFrm := TMsgDialogFrm.Create(nil);
+
+  RegKey := TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
+  RegKey.RootKey := HKEY_CURRENT_USER;
+
+  try
+    RegKey.OpenKey(KEY_DATABASE, True);
+
+    if not RegKey.ValueExists('Backup DB Before Running Upgrade Process') then
+      RegKey.WriteBool('Backup DB Before Running Upgrade Process', True);
+
+    cbxBackupDB.EditValue := RegKey.ReadBool('Backup DB Before Running Upgrade Process');
+    FBackupFolder :=  RegKey.ReadBool('Backup Folder');
+    RegKey.CloseKey;
+  finally
+    RegKey.Free;
+  end;
+
 end;
 
 procedure TMainFrm.FormShow(Sender: TObject);
 var
-  VBShell: string;
-  {$IFDEF DEBUG}ErrorMsg, {$ENDIF}SkinResourceFileName, SkinName: string;
-  RegKey: TRegistry;
+  SkinResourceFileName, SkinName: string;
 begin
   inherited;
   BackupDM.ShellResource := BackupDM.GetShellResource;
@@ -129,7 +165,7 @@ begin
 //  FUpgradeVersion := FDBversion + 1;
   edtCurrentDBVersion.EditValue := FDBVersion {.ToString};
   edtUpgradeVersion.EditValue := FUpgradeVersion {.ToString};
-//  LoadScriptFile(FUpgradeVersion);
+  LoadScriptFile(FUpgradeVersion);
   edtDBFileName.EditValue := BackupDM.DBFileName;
 end;
 
@@ -159,7 +195,7 @@ begin
   Result := CurrentDBVersion + 1;
 
   repeat
-    FileName := APPLICATION_FOLDER + 'DB Update ' + Result.ToString + '.ini';
+    FileName := DB_UPGRADE_SCRIPT_FOLDER + Result.ToString + '.ini';
     FileFound := TFile.Exists(Filename);
 
     if FileFound then
@@ -182,7 +218,7 @@ var
   FileName: string;
 begin
   inherited;
-  FileName := APPLICATION_FOLDER + 'DB Update ' + DBVersion.ToString + '.ini';
+  FileName := DB_UPGRADE_SCRIPT_FOLDER + DBVersion.ToString + '.ini';
 
   if not TFile.Exists(FileName) then
     raise EFileNotFoundException.Create('File not found');
@@ -202,6 +238,7 @@ begin
     edtUpgradeFileName.EditValue := FileName;
   finally
     memUpgradeScript.Lines.EndUpdate;
+
     if BackupDM.conFB.Connected then
       BackupDM.conFB.Close;
   end;
@@ -233,15 +270,82 @@ begin
   end;
 end;
 
+procedure TMainFrm.BackupDB(DBName, BackupName: string);
+begin
+  Screen.Cursor := crHourglass;
+  BackupDM.dbBackup.DriverLink := BackupDM.FDPhysIBDriverLink;
+  BackupDM.dbBackup.UserName := 'sysdba';
+  BackupDM.dbBackup.Password := 'masterkey';
+  BackupDM.dbBackup.Host := 'localhost';
+  BackupDM.dbBackup.protocol := iplocal;
+
+  {TODO: Implement ability to backup/Restore a remote DB}
+//  BackupDM.dbBackup.Host := edthostname.text;
+//  case lucprotocol.itemindex of
+//    0: BackupDM.dbBackup.protocol := iplocal;
+//    1: BackupDM.dbBackup.protocol := iptcpip;
+//  end;
+
+  BackupDM.dbBackup.database := DBName;
+  BackupDM.dbBackup.BackupFiles.text := BackupName;
+
+  try
+  if TFile.Exists(BackupName) then
+  TFile.Delete(BackupName);
+    BackupDM.dbBackup.Backup;
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+procedure TMainFrm.cbxBackupDBPropertiesEditValueChanged(Sender: TObject);
+var
+  RegKey: TRegistry;
+begin
+  inherited;
+  RegKey := TRegistry.Create(KEY_ALL_ACCESS or KEY_WRITE or KEY_WOW64_64KEY);
+  RegKey.RootKey := HKEY_CURRENT_USER;
+
+  try
+    RegKey.OpenKey(KEY_DATABASE, True);
+    cbxBackupDB.EditValue := RegKey.ReadBool('Backup DB Before Running Upgrade Process');
+    RegKey.CloseKey;
+  finally
+    RegKey.Free;
+  end;
+end;
+
 procedure TMainFrm.DoUpgradeDB(Sender: TObject);
 var
   I, J, Counter, NextVersion: Integer;
-  CounterStr: string;
 begin
   inherited;
+  if FDBversion = FUpgradeVersion then
+    raise EValidateException.Create('The latest database upgrade (Ver: ' +
+      FDBversion.ToString + ') has already been applied.');
+
+  Beep;
+  if DisplayMsg(
+    Application.Title,
+    'DB Upgrade Confirmation',
+    'You are about to upgrade the Shell database to version: ' + FUpgradeVersion.ToString +
+    '. This process cannot be stopped once it has started!' + CRLF + CRLF +
+    'Are you sure you want to proceed with the database upgrade process?.',
+    mtConfirmation,
+    [mbYes, mbNo]
+    ) = mrNo then
+    Exit;
+
+
+Screen.Cursor := crHourglass;
+
+if cbxBackupDB.EditValue then
+BackupDB(edtDBFileName.EditValue, FBackupFolder+ 'VBTemp.fbk');
+
   FUpgrading := True;
   actExit.Enabled := not FUpgrading;
   actUpgrade.Enabled := not FUpgrading;
+  actHistgory.Enabled := not FUpgrading;
   Self.Update;
 
   if not BackupDM.conFB.Connected then
@@ -260,7 +364,7 @@ begin
 
       BackupDM.scrGeneric.SQLScripts.Clear;
 
-      for J := 1 to memUpgradeScript.Lines.Count - 1 do
+      for J := 0 to memUpgradeScript.Lines.Count - 1 do
       begin
         if SameText(memUpgradeScript.Lines[J], 'EOF') then
           Break;
@@ -289,22 +393,41 @@ begin
       Inc(NextVersion);
     end;
 
+    FDBversion := FUpgradeVersion;
     UpdateDBVersion(FUpgradeVersion);
     BackupDM.conFB.Close;
     ShowMessage('Database successfully upgraded to version: ' + FUpgradeversion.ToString);
     prgUpgrade.Position := 0;
     sbrMain.Panels[1].Text := 'Ready to upgrade database.';
+    memUpgradeScript.Lines.Clear;
   finally
     FUpgrading := False;
     actExit.Enabled := not FUpgrading;
     actUpgrade.Enabled := not FUpgrading;
+    actHistgory.Enabled := not FUpgrading;
+    Screen.Cursor := crDefault;
   end;
+end;
+
+procedure TMainFrm.DoUpgradehistory(Sender: TObject);
+begin
+  inherited;
+  if UpgraeHistoryFrm = nil then
+    UpgraeHistoryFrm := TUpgraeHistoryFrm.Create(nil);
+
+  UpgraeHistoryFrm.ShowModal;
+  UpgraeHistoryFrm.Close;
+  FreeAndNil(UpgraeHistoryFrm);
 end;
 
 procedure TMainFrm.UpdateDBVersion(NewVersionNo: Integer);
 begin
   BackupDM.cmdGeneric.CommandText.Clear;
-  BackupDM.cmdGeneric.CommandText.Add(Format(UPDATE_DB_VERSION, [NewVersionNo]));
+  BackupDM.cmdGeneric.CommandText.Add(Format(NEW_DB_VERSION, [NewVersionNo]));
+  BackupDM.cmdGeneric.Execute;
+
+  BackupDM.cmdGeneric.CommandText.Clear;
+  BackupDM.cmdGeneric.CommandText.Add(Format(UPDATE_UPGRADE_HISTORY, [NewVersionNo]));
   BackupDM.cmdGeneric.Execute;
 end;
 
