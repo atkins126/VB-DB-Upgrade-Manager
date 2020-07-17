@@ -16,6 +16,9 @@ uses
 {$R *.res}
 
 begin
+{$IFDEF DEBUG}
+  ReportMemoryLeaksOnShutdown := True;
+{$ENDIF}
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
   Application.Title := 'DB Upgrade Manager';

@@ -14,7 +14,7 @@ uses
   cxStyles, dxLayoutContainer, dxLayoutControl, cxContainer, cxEdit, dxBar,
   cxTextEdit, cxMemo, dxLayoutcxEditAdapters, cxButtonEdit, dxScreenTip,
   dxCustomHint, cxHint, cxBarEditItem, cxDropDownEdit, Vcl.Menus, Vcl.StdCtrls,
-  cxButtons;
+  cxButtons, dxBarExtItems, cxMaskEdit;
 
 type
   TUpgraeHistoryFrm = class(TBaseLayoutFrm)
@@ -27,20 +27,22 @@ type
     docToolbar: TdxBarDockControl;
     btnExit: TdxBarLargeButton;
     actExit: TAction;
-    lucScriptFile: TcxBarEditItem;
     repScreenTip: TdxScreenTipRepository;
     tipExit: TdxScreenTip;
     styHintController: TcxHintStyleController;
     dlgFileOpen: TOpenDialog;
-    edtUpgradeScriptLocation: TcxBarEditItem;
+    cntScriptLocation: TdxBarControlContainerItem;
+    cntUpgradeVersion: TdxBarControlContainerItem;
+    edtUpgradeScriptLocation: TcxTextEdit;
+    lucScriptFile: TcxComboBox;
+    lblUpgradeLocation: TdxBarStatic;
+    lblScript: TdxBarStatic;
     procedure DoExitForm(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure lucScriptFilePropertiesChange(Sender: TObject);
     procedure FormShow(Sender: TObject);
   private
     { Private declarations }
-    FSelectedDBVersion: Integer;
-
     procedure LoadScriptFile(DBVersion: Integer);
   public
     { Public declarations }
@@ -61,7 +63,6 @@ var
   FileList: TStringList;
   AComboBox: TcxComboBox;
 begin
-  inherited;
   Caption := 'DB Upgrade History';
   layMain.Align := alClient;
   layMain.LayoutLookAndFeel := lafCustomSkin;
@@ -69,11 +70,12 @@ begin
   edtUpgradeScriptLocation.EditValue := DB_UPGRADE_SCRIPT_FOLDER;
 
   try
-    GetFileList(DB_UPGRADE_SCRIPT_FOLDER, '*.ini', FileList);
+    GetFileList(DB_UPGRADE_SCRIPT_FOLDER, '*.in*', FileList);
+//    GetFileListEx(DB_UPGRADE_SCRIPT_FOLDER, '*.ini', FileList);
     TcxComboBoxProperties(lucScriptFile.Properties).Items := FileList;
-    lucScriptFile.SetFocus;
-    AComboBox := TcxBarEditItemControl(lucScriptFile.Links[0].Control).Edit as TcxComboBox;
-    AComboBox.ItemIndex := 0;
+    lucScriptFile.ItemIndex := 0;
+//    AComboBox := TcxBarEditItemControl(lucScriptFile.Links[0].Control).Edit as TcxComboBox;
+//    AComboBox.ItemIndex := 0;
   finally
     FileList.Free;
   end;
@@ -81,7 +83,7 @@ end;
 
 procedure TUpgraeHistoryFrm.FormShow(Sender: TObject);
 begin
-  inherited;
+    lucScriptFile.SetFocus;
   memUpgradeScript.SetFocus;
 end;
 
@@ -89,7 +91,6 @@ procedure TUpgraeHistoryFrm.LoadScriptFile(DBVersion: Integer);
 var
   FileName: string;
 begin
-  inherited;
   FileName := DB_UPGRADE_SCRIPT_FOLDER + DBVersion.ToString + '.ini';
 
   if not TFile.Exists(FileName) then
@@ -102,18 +103,16 @@ procedure TUpgraeHistoryFrm.lucScriptFilePropertiesChange(Sender: TObject);
 var
   ScriptFileName: string;
 begin
-  inherited;
-  if VarIsNull(lucScriptFile.CurEditValue) then
+  if lucScriptFile.ItemIndex < 0 then
     Exit;
 
-  ScriptFileName := TPath.GetFileNameWithoutExtension(lucScriptFile.CurEditValue);
+  ScriptFileName := TPath.GetFileNameWithoutExtension(lucScriptFile.Text);
   LoadScriptFile(StrToint(ScriptFileName));
   litHistory.CaptionOptions.Text := 'Script processed for DB version: ' + ScriptFileName;
 end;
 
 procedure TUpgraeHistoryFrm.DoExitForm(Sender: TObject);
 begin
-  inherited;
   Self.ModalResult := mrOK;
 end;
 

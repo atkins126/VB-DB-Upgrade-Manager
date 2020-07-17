@@ -6,10 +6,11 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, Vcl.Forms,
   System.Classes, Vcl.Graphics, System.ImageList, Vcl.ImgList, Vcl.Controls,
   Vcl.Dialogs, System.Actions, Vcl.ActnList, System.IOUtils, System.Win.Registry,
+  Vcl.StdCtrls,
 
-  BaseLayout_Frm, CommonValues, VBCommonValues, CommonFunction,
+  BaseLayout_Frm, CommonValues, VBCommonValues, CommonFunction, Backup_DM,
 
-  FireDAC.Phys.IBWrapper,
+  FireDAC.Phys.IBWrapper, FireDAC.Comp.Script,
 
   cxGraphics, cxControls, cxLookAndFeels, cxLookAndFeelPainters, dxSkinsCore,
   dxSkinsDefaultPainters, cxImageList, dxLayoutLookAndFeels, cxClasses, cxStyles,
@@ -17,7 +18,7 @@ uses
   dxCustomHint, cxHint, cxContainer, cxEdit, cxProgressBar, dxStatusBar, cxTextEdit,
   dxLayoutcxEditAdapters, cxButtonEdit, cxBarEditItem, dxRibbonSkins,
   dxRibbonCustomizationForm, dxRibbon, cxCurrencyEdit, cxDropDownEdit,
-  cxCheckBox;
+  cxCheckBox, cxRichEdit;
 
 type
   TMainFrm = class(TBaseLayoutFrm)
@@ -33,8 +34,6 @@ type
     styHintController: TcxHintStyleController;
     sknController: TdxSkinController;
     styReadOnly: TcxEditStyleController;
-    memUpgradeScript: TcxMemo;
-    litScript: TdxLayoutItem;
     edtUpgradeFileName: TcxBarEditItem;
     dlgFileOpen: TOpenDialog;
     edtCurrentDBVersion: TcxBarEditItem;
@@ -49,25 +48,28 @@ type
     tipUpgradeHistory: TdxScreenTip;
     actHistgory: TAction;
     cbxBackupDB: TcxBarEditItem;
+    cbxWordWrap: TcxBarEditItem;
+    memUpgradeScript: TcxRichEdit;
+    litScript: TdxLayoutItem;
     procedure actExitExecute(Sender: TObject);
     procedure DoUpgradeDB(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure edtUpgradeFileNamePropertiesButtonClick(Sender: TObject;
-      AButtonIndex: Integer);
+    procedure edtUpgradeFileNamePropertiesButtonClick(Sender: TObject; AButtonIndex: Integer);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure DoUpgradehistory(Sender: TObject);
     procedure cbxBackupDBPropertiesEditValueChanged(Sender: TObject);
+    procedure cbxWordWrapPropertiesEditValueChanged(Sender: TObject);
   private
     { Private declarations }
     FStatementCount: Integer;
-    FSQLStatement: TStringList;
-    FCommand: string;
+//    FSQLStatement: TStringList;
+//    FCommand: string;
     FDBversion: Integer;
     FUpgradeVersion: Integer;
     FUpgrading: Boolean;
-    FBackupFolder: String;
+    FBackupFolder: string;
 
     procedure LoadScriptFile(DBVersion: Integer);
     procedure UpdateApplicationSkin(SkinResourceFileName, SkinName: string);
@@ -75,6 +77,7 @@ type
     function GetUpgradeVersion(CurrentDBVersion: Integer): Integer;
     procedure UpdateDBVersion(NewVersionNo: Integer);
     procedure BackupDB(DBName, BackupName: string);
+    procedure HandleProgress(var MyMsg: TMessage); message WM_PROGRESS;
   public
     { Public declarations }
   end;
@@ -93,7 +96,6 @@ implementation
 
 uses
   RUtils,
-  Backup_DM,
   UpgraeHistory_Frm,
   MsgDialog_Frm;
 
@@ -111,12 +113,10 @@ begin
   Caption := 'VB Database Upgrade Manager';
   layMain.Align := alClient;
   layMain.LayoutLookAndFeel := lafCustomSkin;
-  sbrMain.Panels[1].Text := 'Ready to upgrade database.';
+  sbrMain.Panels[0].Text := 'Ready to upgrade database.';
   FUpgrading := False;
   prgUpgrade.Position := 0;
-  FSQLStatement := TStringList.Create;
-//  FSQLStatement.Delimiter :=  PIPE;
-  FSQLStatement := CreateStringList(PIPE, DOUBLE_QUOTE);
+//  FSQLStatement := CreateStringList(PIPE, DOUBLE_QUOTE);
   Application.HintPause := 0;
   Application.HintShortPause := 0;
   Application.HintHidePause := 150000;
@@ -138,7 +138,7 @@ begin
       RegKey.WriteBool('Backup DB Before Running Upgrade Process', True);
 
     cbxBackupDB.EditValue := RegKey.ReadBool('Backup DB Before Running Upgrade Process');
-    FBackupFolder :=  RegKey.ReadBool('Backup Folder');
+    FBackupFolder := RegKey.ReadString('Backup Folder');
     RegKey.CloseKey;
   finally
     RegKey.Free;
@@ -171,13 +171,12 @@ end;
 
 procedure TMainFrm.FormDestroy(Sender: TObject);
 begin
-  inherited;
-  FSQLStatement.Free;
+//  FSQLStatement.Free;
 
-//  if MsgDialogFrm <> nil then
-//    FreeAndNil(MsgDialogFrm);
+  if MsgDialogFrm <> nil then
+    FreeAndNil(MsgDialogFrm);
 
-  if Assigned(BackupDM) then
+  if BackupDM <> nil then
     FreeAndNil(BackupDM);
 end;
 
@@ -214,7 +213,6 @@ end;
 
 procedure TMainFrm.LoadScriptFile(DBVersion: Integer);
 var
-  I: Integer;
   FileName: string;
 begin
   inherited;
@@ -228,13 +226,19 @@ begin
   memUpgradeScript.Lines.BeginUpdate;
 
   try
-    for I := 0 to memUpgradeScript.Lines.Count - 1 do
-    begin
-      if SameText(memUpgradeScript.Lines[I], 'EO_STATEMENT') then
-        Inc(FStatementCount);
-    end;
+//    for I := 0 to memUpgradeScript.Lines.Count - 1 do
+//    begin
+////      if SameText(memUpgradeScript.Lines[I], 'EO_STATEMENT') then
+//      if (AnsiPos(';', memUpgradeScript.Lines[I]) > 0)
+//        and (AnsiPos('>', memUpgradeScript.Lines[I]) > 0) then
+//        Continue;
+//
+//        if AnsiPos(';', memUpgradeScript.Lines[I]) > 0 then
+//          Inc(FStatementCount);
+//    end;
 
-    litScript.CaptionOptions.Text := FStatementCount.ToString + ' Upgrade scripts to process';
+    BackupDM.scrGeneric.SQLScriptFileName := FileName;
+//    litScript.CaptionOptions.Text := 'Upgrade scripts to process';
     edtUpgradeFileName.EditValue := FileName;
   finally
     memUpgradeScript.Lines.EndUpdate;
@@ -290,8 +294,8 @@ begin
   BackupDM.dbBackup.BackupFiles.text := BackupName;
 
   try
-  if TFile.Exists(BackupName) then
-  TFile.Delete(BackupName);
+    if TFile.Exists(BackupName) then
+      TFile.Delete(BackupName);
     BackupDM.dbBackup.Backup;
   finally
     Screen.Cursor := crDefault;
@@ -315,11 +319,21 @@ begin
   end;
 end;
 
+procedure TMainFrm.cbxWordWrapPropertiesEditValueChanged(Sender: TObject);
+begin
+  memUpgradeScript.Properties.WordWrap := cbxWordWrap.EditValue;
+
+  if memUpgradeScript.Properties.WordWrap then
+    memUpgradeScript.Properties.ScrollBars := Vcl.StdCtrls.ssVertical
+  else
+    memUpgradeScript.Properties.ScrollBars := Vcl.StdCtrls.ssBoth;
+end;
+
 procedure TMainFrm.DoUpgradeDB(Sender: TObject);
 var
-  I, J, Counter, NextVersion: Integer;
+  NextVersion: Integer;
+  LogList: TStringList;
 begin
-  inherited;
   if FDBversion = FUpgradeVersion then
     raise EValidateException.Create('The latest database upgrade (Ver: ' +
       FDBversion.ToString + ') has already been applied.');
@@ -336,11 +350,10 @@ begin
     ) = mrNo then
     Exit;
 
-
-Screen.Cursor := crHourglass;
-
-if cbxBackupDB.EditValue then
-BackupDB(edtDBFileName.EditValue, FBackupFolder+ 'VBTemp.fbk');
+  Screen.Cursor := crHourglass;
+  LogList := RUtils.CreateStringList(PIPE, DOUBLE_QUOTE);
+  if cbxBackupDB.EditValue then
+    BackupDB(edtDBFileName.EditValue, FBackupFolder + 'VBTemp.fbk');
 
   FUpgrading := True;
   actExit.Enabled := not FUpgrading;
@@ -351,62 +364,91 @@ BackupDB(edtDBFileName.EditValue, FBackupFolder+ 'VBTemp.fbk');
   if not BackupDM.conFB.Connected then
     BackupDM.conFB.Open;
 
-  sbrMain.Panels[1].Text := 'Dabatase upgrade in progress...';
+  sbrMain.Panels[0].Text := 'Dabatase upgrade in progress...';
   NextVersion := FDBversion + 1;
+  TDirectory.CreateDirectory(DB_UPGRADE_SCRIPT_FOLDER);
+
+  BackupDM.scrGeneric.ScriptOptions.SpoolFileName :=
+    DB_UPGRADE_SCRIPT_FOLDER + 'VB DB Ver ' + NextVersion.ToString + ' upgrade log ' +
+    FormatDateTime('yyyy-MM-dd hh-mm-ss', Now) + '.txt';
 
   try
-    for I := FDBversion + 1 to FUpgradeVersion do
-    begin
-      Counter := 0;
-      prgUpgrade.Position := 0;
-      prgUpgrade.Properties.Max := FStatementCount;
-      LoadScriptFile(NextVersion);
-
-      BackupDM.scrGeneric.SQLScripts.Clear;
-
-      for J := 0 to memUpgradeScript.Lines.Count - 1 do
-      begin
-        if SameText(memUpgradeScript.Lines[J], 'EOF') then
-          Break;
-
-        if not (SameText(Trim(memUpgradeScript.Lines[J]), 'EO_STATEMENT'))
-          and (Length(Trim(memUpgradeScript.Lines[J])) > 0) then
-          FSQLStatement.Add(memUpgradeScript.Lines[J]);
-
-        if SameText(memUpgradeScript.Lines[J], 'EO_STATEMENT') then
-        begin
-          Inc(Counter);
-          prgUpgrade.Position := Counter;
-          prgUpgrade.Update;
-          sbrMain.Panels[1].Text := 'Running script ' + Counter.ToString + ' of ' + FStatementCount.ToString;
-          sbrMain.Update;
-          FCommand := FSQLStatement.Text;
-          BackupDM.scrGeneric.SQLScripts.Add;
-          BackupDM.scrGeneric.SQLScripts[0].SQL.Add(FCommand);
-          BackupDM.scrGeneric.ValidateAll;
-          BackupDM.scrGeneric.ExecuteAll;
-          BackupDM.scrGeneric.SQLScripts.Clear;
-          FCommand := '';
-          FSQLStatement.Clear;
-        end;
-      end;
-      Inc(NextVersion);
-    end;
-
+    BackupDM.scrGeneric.ValidateAll;
+    BackupDM.scrGeneric.ExecuteAll;
     FDBversion := FUpgradeVersion;
     UpdateDBVersion(FUpgradeVersion);
     BackupDM.conFB.Close;
     ShowMessage('Database successfully upgraded to version: ' + FUpgradeversion.ToString);
+//    BackupDM.dlgScript.Destroy;
     prgUpgrade.Position := 0;
-    sbrMain.Panels[1].Text := 'Ready to upgrade database.';
+    sbrMain.Panels[0].Text := 'Ready to upgrade database.';
     memUpgradeScript.Lines.Clear;
   finally
     FUpgrading := False;
+    LogList.Free;
     actExit.Enabled := not FUpgrading;
     actUpgrade.Enabled := not FUpgrading;
     actHistgory.Enabled := not FUpgrading;
     Screen.Cursor := crDefault;
   end;
+
+//  try
+//    for I := FDBversion + 1 to FUpgradeVersion do
+//    begin
+//      Counter := 0;
+//      prgUpgrade.Position := 0;
+//      prgUpgrade.Properties.Max := FStatementCount;
+//      LoadScriptFile(NextVersion);
+//
+//      BackupDM.scrGeneric.SQLScripts.Clear;
+//
+//      for J := 0 to memUpgradeScript.Lines.Count - 1 do
+//      begin
+//        if SameText(memUpgradeScript.Lines[J], 'EOF') then
+//          Break;
+//
+//        if not (SameText(Trim(memUpgradeScript.Lines[J]), 'EO_STATEMENT'))
+//          and (Length(Trim(memUpgradeScript.Lines[J])) > 0) then
+//          FSQLStatement.Add(memUpgradeScript.Lines[J]);
+//
+//        if SameText(memUpgradeScript.Lines[J], 'EO_STATEMENT') then
+//        begin
+//          Inc(Counter);
+//          prgUpgrade.Position := Counter;
+//          prgUpgrade.Update;
+//          sbrMain.Panels[0].Text := 'Running script ' + Counter.ToString + ' of ' + FStatementCount.ToString;
+//          sbrMain.Update;
+//          FCommand := FSQLStatement.Text;
+//          LogList.Clear;
+//          LogList.Add(FCommand);
+//          LogList.SaveToFile('C:\Data\LogList.txt');
+//          BackupDM.scrGeneric.SQLScripts.Add;
+//          BackupDM.scrGeneric.SQLScripts[0].SQL.Add(FCommand);
+//          BackupDM.scrGeneric.ValidateAll;
+//          BackupDM.scrGeneric.ExecuteAll;
+//          BackupDM.scrGeneric.SQLScripts.Clear;
+//          FCommand := '';
+//          FSQLStatement.Clear;
+//        end;
+//      end;
+//      Inc(NextVersion);
+//    end;
+//
+//    FDBversion := FUpgradeVersion;
+//    UpdateDBVersion(FUpgradeVersion);
+//    BackupDM.conFB.Close;
+//    ShowMessage('Database successfully upgraded to version: ' + FUpgradeversion.ToString);
+//    prgUpgrade.Position := 0;
+//    sbrMain.Panels[0].Text := 'Ready to upgrade database.';
+//    memUpgradeScript.Lines.Clear;
+//  finally
+//    FUpgrading := False;
+//    LogList.Free;
+//    actExit.Enabled := not FUpgrading;
+//    actUpgrade.Enabled := not FUpgrading;
+//    actHistgory.Enabled := not FUpgrading;
+//    Screen.Cursor := crDefault;
+//  end;
 end;
 
 procedure TMainFrm.DoUpgradehistory(Sender: TObject);
@@ -440,5 +482,17 @@ begin
 //  end;
 end;
 
+procedure TMainFrm.HandleProgress(var MyMsg: TMessage);
+begin
+  try
+    sbrMain.Panels[0].Text := 'Running script ' + PChar(MyMsg.WParam) + ' of ' + FStatementCount.ToString;
+    sbrMain.Update;
+  finally
+    MyMsg.Result := -1;
+  end;
+end;
+
 end.
+
+
 

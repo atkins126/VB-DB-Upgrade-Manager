@@ -55,6 +55,23 @@ inherited UpgraeHistoryFrm: TUpgraeHistoryFrm
       Index = 1
     end
   end
+  object edtUpgradeScriptLocation: TcxTextEdit [1]
+    Left = 50
+    Top = 110
+    BeepOnEnter = False
+    TabOrder = 1
+    Width = 300
+  end
+  object lucScriptFile: TcxComboBox [2]
+    Left = 356
+    Top = 110
+    Properties.DropDownListStyle = lsFixedList
+    Properties.ImmediatePost = True
+    Properties.ValidateOnEnter = False
+    Properties.OnChange = lucScriptFilePropertiesChange
+    TabOrder = 2
+    Width = 130
+  end
   inherited styRepository: TcxStyleRepository
     PixelsPerInch = 96
   end
@@ -300,16 +317,20 @@ inherited UpgraeHistoryFrm: TUpgraeHistoryFrm
           ItemName = 'btnExit'
         end
         item
-          UserDefine = [udWidth]
-          UserWidth = 203
           Visible = True
-          ItemName = 'edtUpgradeScriptLocation'
+          ItemName = 'lblUpgradeLocation'
         end
         item
-          UserDefine = [udWidth]
-          UserWidth = 90
           Visible = True
-          ItemName = 'lucScriptFile'
+          ItemName = 'cntScriptLocation'
+        end
+        item
+          Visible = True
+          ItemName = 'lblScript'
+        end
+        item
+          Visible = True
+          ItemName = 'cntUpgradeVersion'
         end>
       MultiLine = True
       NotDocking = [dsNone, dsLeft, dsTop, dsRight, dsBottom]
@@ -326,24 +347,31 @@ inherited UpgraeHistoryFrm: TUpgraeHistoryFrm
       ScreenTip = tipExit
       AutoGrayScale = False
     end
-    object lucScriptFile: TcxBarEditItem
-      Caption = 'Upgrade Version'
+    object cntScriptLocation: TdxBarControlContainerItem
+      Caption = 'New Item'
       Category = 0
-      Hint = 'Upgrade Version'
+      Hint = 'New Item'
       Visible = ivAlways
-      ShowCaption = True
-      PropertiesClassName = 'TcxComboBoxProperties'
-      Properties.ImmediatePost = True
-      Properties.OnChange = lucScriptFilePropertiesChange
+      Control = edtUpgradeScriptLocation
     end
-    object edtUpgradeScriptLocation: TcxBarEditItem
+    object cntUpgradeVersion: TdxBarControlContainerItem
+      Caption = 'New Item'
+      Category = 0
+      Hint = 'New Item'
+      Visible = ivAlways
+      Control = lucScriptFile
+    end
+    object lblUpgradeLocation: TdxBarStatic
       Caption = 'Upgrade script location'
       Category = 0
       Hint = 'Upgrade script location'
       Visible = ivAlways
-      ShowCaption = True
-      PropertiesClassName = 'TcxTextEditProperties'
-      Properties.ReadOnly = True
+    end
+    object lblScript: TdxBarStatic
+      Caption = 'Upgrade version'
+      Category = 0
+      Hint = 'Upgrade version'
+      Visible = ivAlways
     end
   end
   object repScreenTip: TdxScreenTipRepository

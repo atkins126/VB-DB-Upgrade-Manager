@@ -1,11 +1,11 @@
 inherited MainFrm: TMainFrm
   Caption = 'MainFrm'
   ClientHeight = 730
-  ClientWidth = 884
+  ClientWidth = 984
   Visible = True
   OnCloseQuery = FormCloseQuery
   OnDestroy = FormDestroy
-  ExplicitWidth = 900
+  ExplicitWidth = 1000
   ExplicitHeight = 769
   PixelsPerInch = 96
   TextHeight = 13
@@ -16,20 +16,7 @@ inherited MainFrm: TMainFrm
     ExplicitTop = 145
     ExplicitWidth = 766
     ExplicitHeight = 486
-    object memUpgradeScript: TcxMemo [0]
-      Left = 11
-      Top = 30
-      Properties.ReadOnly = True
-      Properties.ScrollBars = ssBoth
-      Properties.WordWrap = False
-      Style.HotTrack = False
-      Style.StyleController = styReadOnly
-      Style.TransparentBorder = False
-      TabOrder = 0
-      Height = 420
-      Width = 744
-    end
-    object prgUpgrade: TcxProgressBar [1]
+    object prgUpgrade: TcxProgressBar [0]
       Left = 11
       Top = 456
       Properties.BorderWidth = 1
@@ -52,22 +39,25 @@ inherited MainFrm: TMainFrm
       Transparent = True
       Width = 744
     end
+    object memUpgradeScript: TcxRichEdit [1]
+      Left = 11
+      Top = 11
+      Properties.HideScrollBars = False
+      Properties.ScrollBars = ssBoth
+      Properties.WordWrap = False
+      Style.HotTrack = False
+      Style.StyleController = styReadOnly
+      Style.TransparentBorder = False
+      TabOrder = 0
+      Height = 439
+      Width = 744
+    end
     inherited layMainGroup_Root: TdxLayoutGroup
       ItemIndex = 1
     end
-    object litScript: TdxLayoutItem
-      Parent = layMainGroup_Root
-      AlignVert = avClient
-      CaptionOptions.Text = 'Upgrade Script'
-      CaptionOptions.Layout = clTop
-      Control = memUpgradeScript
-      ControlOptions.OriginalHeight = 246
-      ControlOptions.OriginalWidth = 441
-      ControlOptions.ShowBorder = False
-      Index = 0
-    end
     object litProgress: TdxLayoutItem
       Parent = layMainGroup_Root
+      Visible = False
       CaptionOptions.Visible = False
       Control = prgUpgrade
       ControlOptions.OriginalHeight = 19
@@ -75,11 +65,21 @@ inherited MainFrm: TMainFrm
       ControlOptions.ShowBorder = False
       Index = 1
     end
+    object litScript: TdxLayoutItem
+      Parent = layMainGroup_Root
+      AlignVert = avClient
+      CaptionOptions.Visible = False
+      Control = memUpgradeScript
+      ControlOptions.OriginalHeight = 420
+      ControlOptions.OriginalWidth = 744
+      ControlOptions.ShowBorder = False
+      Index = 0
+    end
   end
   object ribMain: TdxRibbon [1]
     Left = 0
     Top = 0
-    Width = 884
+    Width = 984
     Height = 125
     BarManager = barManager
     ColorSchemeName = 'UserSkin'
@@ -100,13 +100,9 @@ inherited MainFrm: TMainFrm
   object sbrMain: TdxStatusBar [2]
     Left = 0
     Top = 710
-    Width = 884
+    Width = 984
     Height = 20
     Panels = <
-      item
-        PanelStyleClassName = 'TdxStatusBarTextPanelStyle'
-        Width = 160
-      end
       item
         PanelStyleClassName = 'TdxStatusBarTextPanelStyle'
         Text = 'Database upgrade in progress...'
@@ -756,6 +752,13 @@ inherited MainFrm: TMainFrm
           UserWidth = 53
           Visible = True
           ItemName = 'edtUpgradeVersion'
+        end
+        item
+          UserDefine = [udWidth]
+          UserWidth = 20
+          ViewLayout = ivlGlyphControlCaption
+          Visible = True
+          ItemName = 'cbxWordWrap'
         end>
       MultiLine = True
       NotDocking = [dsNone, dsLeft, dsTop, dsRight, dsBottom]
@@ -799,9 +802,9 @@ inherited MainFrm: TMainFrm
       Properties.ReadOnly = True
     end
     object edtUpgradeVersion: TcxBarEditItem
-      Caption = 'To Version     '
+      Caption = 'To version     '
       Category = 0
-      Hint = 'To Version     '
+      Hint = 'To version     '
       Visible = ivAlways
       PropertiesClassName = 'TcxCurrencyEditProperties'
       Properties.DecimalPlaces = 0
@@ -829,6 +832,16 @@ inherited MainFrm: TMainFrm
       Visible = ivAlways
       PropertiesClassName = 'TcxCheckBoxProperties'
       Properties.OnEditValueChanged = cbxBackupDBPropertiesEditValueChanged
+    end
+    object cbxWordWrap: TcxBarEditItem
+      Caption = 'Word wrap'
+      Category = 0
+      Hint = 'Word wrap'
+      Visible = ivAlways
+      PropertiesClassName = 'TcxCheckBoxProperties'
+      Properties.ImmediatePost = True
+      Properties.OnEditValueChanged = cbxWordWrapPropertiesEditValueChanged
+      InternalEditValue = False
     end
   end
   object repScreenTip: TdxScreenTipRepository
